@@ -1,0 +1,141 @@
+{
+  "name": "PARITY — Deal Chat",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "om-chat",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "Webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "parity-om-chat"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the Anthropic request for a grounded question about one screened deal.\nconst b = $json.body || $json || {};\nconst question = (b.question || '').toString().trim();\nif (!question) {\n  return [{ json: { __guard:'NO_QUESTION', model:'claude-sonnet-5', max_tokens:16,\n    messages:[{ role:'user', content:'Reply with the single word: skip' }] } }];\n}\n\nconst deal = b.deal || {};\n// Strip the bulky source text out of the analysis blob, then re-attach it separately\n// so we control exactly how much OM text goes into the prompt.\nconst analysis = Object.assign({}, deal);\nconst omText = ((deal.source && deal.source.text) || b.om_text || '').toString();\ndelete analysis.source;\n\nconst OM_BUDGET = 90000;\nconst omExcerpt = omText.slice(0, OM_BUDGET);\n\nlet analysisJson = '';\ntry { analysisJson = JSON.stringify(analysis, null, 1); } catch(e) { analysisJson = '{}'; }\nif (analysisJson.length > 90000) analysisJson = analysisJson.slice(0, 90000) + '\\n… (analysis truncated)';\n\n// Recent turns only — keeps latency and cost bounded.\nconst history = Array.isArray(b.history) ? b.history.slice(-8) : [];\nconst messages = [];\nfor (const turn of history) {\n  const role = turn && turn.role === 'assistant' ? 'assistant' : 'user';\n  const content = (turn && turn.content || '').toString().slice(0, 4000);\n  if (content) messages.push({ role, content });\n}\n\nmessages.push({ role:'user', content:\n  'ANALYSIS (PARITY computed screening result):\\n' + analysisJson +\n  '\\n\\nOM TEXT (raw extract from the Offering Memorandum' +\n  (omText.length > OM_BUDGET ? ', truncated' : '') + '):\\n' + omExcerpt +\n  '\\n\\nQUESTION:\\n' + question });\n\nreturn [{ json: {\n  model: 'claude-sonnet-5',\n  max_tokens: 1500,\n  system: \"You are the PARITY deal analyst assistant. You answer an acquisitions analyst's questions\\nabout ONE multifamily deal that PARITY has already screened.\\n\\nYou are given two sources for FACTS ABOUT THIS DEAL:\\n  (1) ANALYSIS — PARITY's computed screening result: metrics, the rule set, every raised\\n      flag with its severity, points lost, evidence and OM page citation, and the\\n      provenance tag on each figure (ACTUAL / SELLER / CALCULATED / ASSUMPTION).\\n  (2) OM TEXT — the raw text extracted from the Offering Memorandum.\\n\\nTWO KINDS OF QUESTION — handle them differently:\\n\\nA. CONCEPT QUESTIONS (\\\"what is NOI\\\", \\\"what's a cap rate\\\", \\\"what does DSCR mean\\\", \\\"why\\n   does loss-to-lease matter\\\", \\\"how is equity multiple calculated\\\", \\\"what is a T-12\\\").\\n   Answer these from your own commercial real estate knowledge — clearly and concisely,\\n   the way a senior analyst would explain it to a junior one. You do NOT need a source in\\n   the ANALYSIS or OM to explain a standard industry concept, and you must not refuse\\n   these. Give the definition, why it matters, and the formula when there is one.\\n   THEN, whenever this deal has a relevant figure, ground the concept in it: give the\\n   deal's number with its provenance and page cite so the definition lands on something\\n   concrete. Keep that second part short — one or two sentences.\\n\\nB. FACT QUESTIONS about this specific deal (any number, claim, date, name, or condition\\n   of this property). These are strictly grounded — see the rules below.\\n\\nGROUNDING RULES for deal facts — these are absolute:\\n- Never invent, estimate, or infer a number for THIS DEAL. If a figure is not in the\\n  ANALYSIS or the OM TEXT, say plainly that the OM does not state it.\\n- Never present general knowledge as a fact about this property. Typical market ranges,\\n  rules of thumb and industry benchmarks are fine to mention, but label them as general\\n  context, clearly separated from what this OM actually says.\\n- Prefer the ANALYSIS over the OM for any computed figure. The OM is a MARKETING\\n  document: its headline numbers are claims, not facts. PARITY's re-underwritten figures\\n  are the independent view.\\n- When a broker claim and PARITY's calculation disagree, say so explicitly and give both,\\n  labelled. That gap is usually the most useful thing you can tell the analyst.\\n- Always carry provenance. State whether a number is a trailing actual, a seller pro\\n  forma claim, a PARITY calculation, or an assumption. Cite the OM page (e.g. p9) when\\n  the ANALYSIS or OM TEXT gives one.\\n- Do not give investment advice or a buy/sell recommendation. You may explain what the\\n  score, verdict and flags mean and what due diligence would resolve them.\\n- Multifamily and commercial real estate questions are always in scope, even when they\\n  are not about this deal. Only decline things genuinely unrelated to real estate or to\\n  this screening.\\n\\nSTYLE: direct and analytical, like a colleague on the acquisitions desk. Lead with the\\nanswer, then the evidence. Use short paragraphs; use a compact table only when comparing\\nfigures. Never pad. Do not repeat the question back. Two to six sentences is usually right.\",\n  messages\n} }];"
+      },
+      "id": "Prep_chat_request",
+      "name": "Prep chat request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "Claude_chat",
+      "name": "Claude chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise the Anthropic response into { answer } for the UI.\nconst MAC_ROMAN_HI = [196,197,199,201,209,214,220,225,224,226,228,227,229,231,233,232,\n234,235,237,236,238,239,241,243,242,244,246,245,250,249,251,252,8224,176,162,163,167,\n8226,182,223,174,169,8482,180,168,8800,198,216,8734,177,8804,8805,165,181,8706,8721,\n8719,960,8747,170,186,937,230,248,191,161,172,8730,402,8776,8710,171,187,8230,160,192,\n195,213,338,339,8211,8212,8220,8221,8216,8217,247,9674,255,376,8260,8364,8249,8250,\n64257,64258,8225,183,8218,8222,8240,194,202,193,203,200,205,206,207,204,211,212,63743,\n210,218,219,217,305,710,732,175,728,729,730,184,733,731,711];\nconst MAC_ROMAN_INV = {}; MAC_ROMAN_HI.forEach((cp,i)=>{ MAC_ROMAN_INV[cp] = 0x80+i; });\nfunction repairMojibake(str){\n  if (typeof str !== 'string' || str.indexOf('\\u201A') === -1) return str;\n  try {\n    const bytes = [];\n    for (const ch of str) {\n      const cp = ch.codePointAt(0);\n      if (cp < 0x80) bytes.push(cp);\n      else if (MAC_ROMAN_INV[cp] !== undefined) bytes.push(MAC_ROMAN_INV[cp]);\n      else return str;\n    }\n    return Buffer.from(bytes).toString('utf8');\n  } catch(e){ return str; }\n}\n\nlet guard = null;\ntry { guard = $('Prep chat request').first().json.__guard || null; } catch(e){}\nif (guard === 'NO_QUESTION') {\n  return [{ json: { error: { code:'no_question', message:'Ask a question about this deal.' } } }];\n}\n\nconst r = $json || {};\nlet text = '';\nif (r && Array.isArray(r.content)) text = r.content.map(c=>c.text||'').join('');\nelse if (typeof r === 'string') text = r;\ntext = repairMojibake(text).trim();\n\nif (!text) {\n  return [{ json: { error: { code:'empty_response',\n    message:'The assistant did not return an answer. Please try again.', retryable:true } } }];\n}\nreturn [{ json: { answer: text, model: r.model || null,\n  usage: r.usage ? { input: r.usage.input_tokens, output: r.usage.output_tokens } : null } }];"
+      },
+      "id": "Format_reply",
+      "name": "Format reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        880,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prep chat request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep chat request": {
+      "main": [
+        [
+          {
+            "node": "Claude chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude chat": {
+      "main": [
+        [
+          {
+            "node": "Format reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format reply": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

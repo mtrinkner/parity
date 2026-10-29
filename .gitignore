@@ -1,0 +1,32 @@
+# dependencies / build
+node_modules/
+.next/
+dist/
+build/
+
+# env
+.env
+.env.*
+!.env.example
+
+# os
+.DS_Store
+
+# large media (link these instead of committing them)
+*.mp4
+*.zip
+
+# Source offering memoranda and anything derived from them.
+# The OM this project was tested against is a confidential third party document.
+# These stay local and are never published. The engine ships a synthetic fixture instead.
+*.pdf
+*.xlsx
+*-om-dataset.md
+*-risk-report.json
+*-risk-report.md
+!example-risk-report.json
+!example-risk-report.md
+risk-engine/*Deal.js
+!risk-engine/exampleDeal.js
+underwriting-model-field-mapping.json
+underwriting-model-structure.md
