@@ -10,7 +10,7 @@ Built for the CBRE x Project Destined AI Agents hackathon.
 
 ## Demo
 
-**Watch the walkthrough: <!-- PASTE VIDEO LINK HERE -->**
+**[Watch the walkthrough (4:26)](https://github.com/mtrinkner/parity/releases/download/v1.0/PARITY_Demo_MasonTrinkner.mp4)**  ·  [all releases](https://github.com/mtrinkner/parity/releases/tag/v1.0)
 
 Four and a half minutes, recorded while the app was live. The first 1:43 covers the problem and the
 architecture. The remaining 2:43 is the running product: the landing page, a real offering memorandum
